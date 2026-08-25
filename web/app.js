@@ -47,6 +47,8 @@
     backgroundColorInput: $("#backgroundColorInput"),
     backgroundColorValue: $("#backgroundColorValue"),
     cancelBackground: $("#cancelBackgroundButton"),
+    applyWallpaper: $("#applyWallpaperButton"),
+    restoreWallpaper: $("#restoreWallpaperButton"),
     download: $("#downloadButton"),
     fullscreen: $("#fullscreenButton"),
     saveStatus: $("#saveStatus"),
@@ -79,6 +81,8 @@
   let renderToken = 0;
   let saveTimer = 0;
   let toastTimer = 0;
+  let nativeActionTimer = 0;
+  let lastRenderError = "";
 
   function cloneDefault() {
     return JSON.parse(JSON.stringify(defaultState));
@@ -152,6 +156,22 @@
     elements.addEvent.disabled = state.events.length >= MAX_PERSONAL;
   }
 
+  function nativeWallpaperHandler() {
+    return window.webkit?.messageHandlers?.wallpaper || null;
+  }
+
+  function syncNativeCapabilities() {
+    const available = Boolean(nativeWallpaperHandler());
+    elements.applyWallpaper.hidden = !available;
+    elements.restoreWallpaper.hidden = !available;
+  }
+
+  function setNativeActionPending(action, pending) {
+    for (const button of [elements.applyWallpaper, elements.restoreWallpaper]) button.disabled = pending;
+    elements.applyWallpaper.setAttribute("aria-busy", String(pending && action === "apply"));
+    elements.restoreWallpaper.setAttribute("aria-busy", String(pending && action === "restore"));
+  }
+
   function bindControls() {
     elements.addEvent.addEventListener("click", () => openEventDialog(-1));
     elements.refreshConference.addEventListener("click", () => loadConferenceDeadlines(true));
@@ -167,6 +187,9 @@
       elements.backgroundDialog.close();
       showToast("기본 밝은 배경으로 돌아왔습니다.");
     });
+    elements.applyWallpaper.addEventListener("click", applyWallpaperToDesktop);
+    elements.restoreWallpaper.addEventListener("click", restoreOriginalWallpaper);
+    window.addEventListener("schedule-wallpaper:native-result", handleNativeWallpaperResult);
     elements.download.addEventListener("click", downloadWallpaper);
     elements.fullscreen.addEventListener("click", toggleFullscreen);
     elements.canvas.addEventListener("dblclick", handleCanvasDoubleClick);
@@ -536,8 +559,18 @@
   }
 
   function roundedRect(x, y, w, h, r) {
+    const radius = Math.max(0, Math.min(r, w / 2, h / 2));
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, r);
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+    ctx.lineTo(x + radius, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
   }
 
   function drawPanelFrame(x, y, w, h) {
@@ -665,13 +698,44 @@
     const token = ++renderToken;
     requestAnimationFrame(() => {
       if (token !== renderToken) return;
-      ctx.clearRect(0, 0, WIDTH, HEIGHT);
-      if (backgroundImage) drawCoverImage(backgroundImage);
-      else if (state.backgroundColor) drawSolidBackground(state.backgroundColor);
-      else drawDefaultBackground();
-      drawPersonalPanel();
-      drawConferencePanel();
+      try {
+        ctx.clearRect(0, 0, WIDTH, HEIGHT);
+        if (backgroundImage) drawCoverImage(backgroundImage);
+        else if (state.backgroundColor) drawSolidBackground(state.backgroundColor);
+        else drawDefaultBackground();
+        drawPersonalPanel();
+        drawConferencePanel();
+        lastRenderError = "";
+        if (elements.warning.textContent.startsWith("미리보기 렌더링")) elements.warning.textContent = "";
+      } catch (error) {
+        lastRenderError = error instanceof Error ? error.message : String(error);
+        elements.warning.textContent = "미리보기 렌더링 오류";
+        console.error("미리보기 렌더링에 실패했습니다.", error);
+      }
     });
+  }
+
+  function canvasLooksRendered() {
+    if (lastRenderError) return false;
+    try {
+      const probe = document.createElement("canvas");
+      probe.width = 16;
+      probe.height = 9;
+      const probeContext = probe.getContext("2d", { willReadFrequently: true });
+      if (!probeContext) return false;
+      probeContext.drawImage(elements.canvas, 0, 0, probe.width, probe.height);
+      const pixels = probeContext.getImageData(0, 0, probe.width, probe.height).data;
+      let opaquePixels = 0;
+      const colors = new Set();
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (pixels[index + 3] > 240) opaquePixels += 1;
+        colors.add(`${pixels[index] >> 4},${pixels[index + 1] >> 4},${pixels[index + 2] >> 4}`);
+      }
+      return opaquePixels >= probe.width * probe.height * .95 && colors.size >= 3;
+    } catch (error) {
+      console.error("미리보기 검증에 실패했습니다.", error);
+      return false;
+    }
   }
 
   function downloadWallpaper() {
@@ -683,6 +747,51 @@
       link.click();
       showToast("1920 × 1080 PNG를 저장했습니다.");
     });
+  }
+
+  function postNativeWallpaperAction(action, data = "") {
+    const handler = nativeWallpaperHandler();
+    if (!handler) {
+      showToast("배경화면 직접 적용은 Mac 앱에서 사용할 수 있습니다.", true);
+      return;
+    }
+    setNativeActionPending(action, true);
+    clearTimeout(nativeActionTimer);
+    nativeActionTimer = window.setTimeout(() => {
+      setNativeActionPending(action, false);
+      showToast("macOS가 응답하지 않았습니다. 다시 시도해 주세요.", true);
+    }, 10000);
+    try {
+      handler.postMessage({ action, data });
+    } catch (error) {
+      clearTimeout(nativeActionTimer);
+      setNativeActionPending(action, false);
+      console.error("macOS 배경화면 요청을 보내지 못했습니다.", error);
+      showToast("배경화면 요청을 보내지 못했습니다.", true);
+    }
+  }
+
+  function applyWallpaperToDesktop() {
+    renderWallpaper();
+    requestAnimationFrame(() => {
+      if (!canvasLooksRendered()) {
+        showToast("미리보기가 완성되지 않아 배경화면을 적용하지 않았습니다.", true);
+        return;
+      }
+      postNativeWallpaperAction("apply", elements.canvas.toDataURL("image/png"));
+    });
+  }
+
+  function restoreOriginalWallpaper() {
+    postNativeWallpaperAction("restore");
+  }
+
+  function handleNativeWallpaperResult(event) {
+    const detail = event.detail || {};
+    if (!['apply', 'restore'].includes(detail.action)) return;
+    clearTimeout(nativeActionTimer);
+    setNativeActionPending(detail.action, false);
+    showToast(detail.message || (detail.ok ? "배경화면을 변경했습니다." : "배경화면을 변경하지 못했습니다."), !detail.ok);
   }
 
   async function toggleFullscreen() {
@@ -703,6 +812,7 @@
   }
 
   async function init() {
+    syncNativeCapabilities();
     bindControls();
     syncUI();
     await loadBackgroundFromState();

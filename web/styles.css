@@ -97,11 +97,17 @@ button:focus-visible, input:focus-visible, .canvas-shell:focus-visible, label[fo
 .button svg { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .button-primary { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 8px 20px rgba(37, 99, 235, .2); }
 .button-primary:hover { border-color: #1d4ed8; background: #1d4ed8; }
+.button-apply { border-color: var(--success); background: var(--success); color: #fff; box-shadow: 0 8px 20px rgba(33, 130, 104, .2); }
+.button-apply:hover { border-color: #176c56; background: #176c56; }
 .button-secondary { border-color: var(--line); background: rgba(255, 255, 255, .78); }
 .button-secondary:hover, .button-quiet:hover, .button-order:hover { border-color: rgba(37, 99, 235, .22); background: #edf4fd; }
 .button-quiet { color: var(--muted); }
 .button-danger { color: var(--danger); }
 .button-danger:hover { border-color: rgba(207, 83, 98, .27); background: #fff1f3; }
+.button:disabled { opacity: .58; cursor: not-allowed; transform: none; }
+.native-wallpaper-action[aria-busy="true"] svg { animation: wallpaper-action-spin .8s linear infinite; }
+
+@keyframes wallpaper-action-spin { to { transform: rotate(360deg); } }
 
 .workspace { min-height: calc(100vh - 68px); padding: clamp(12px, 2vw, 24px); }
 .preview-area { width: min(100%, 1620px); margin: 0 auto; }
@@ -169,6 +175,25 @@ button:focus-visible, input:focus-visible, .canvas-shell:focus-visible, label[fo
 .toast.show { opacity: 1; transform: translateY(0); }
 .toast.error { border-color: rgba(207, 83, 98, .35); color: var(--danger); }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; }
+
+@media (max-width: 900px) {
+  html.native-app .conference-status { display: none; }
+  html.native-app .top-actions { gap: 5px; }
+  html.native-app .top-actions .button { min-height: 44px; padding: 0 10px; }
+  html.native-app #addEventButton span,
+  html.native-app #restoreWallpaperButton span,
+  html.native-app #applyWallpaperButton span,
+  html.native-app #downloadButton span { font-size: 0; }
+  html.native-app #addEventButton span::after { content: "추가"; font-size: 12px; }
+  html.native-app #restoreWallpaperButton span::after { content: "복원"; font-size: 12px; }
+  html.native-app #applyWallpaperButton span::after { content: "적용"; font-size: 12px; }
+  html.native-app #downloadButton span::after { content: "PNG"; font-size: 12px; }
+  html.native-app .toast { top: 12px; right: auto; bottom: auto; left: 12px; max-width: min(330px, calc(100vw - 440px)); }
+}
+
+@media (max-width: 900px) and (max-height: 650px) {
+  html.native-app .canvas-shell { min-height: min(72vh, 760px); }
+}
 
 @media (max-width: 700px) {
   .topbar { gap: 8px; padding: 10px 12px; }

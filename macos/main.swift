@@ -4,6 +4,39 @@ import UniformTypeIdentifiers
 
 private let appPort = 18767
 
+private enum WallpaperBridgeError: LocalizedError {
+    case invalidPayload
+    case invalidImage
+    case noScreens
+    case originalNotSaved
+    case originalUnavailable(String)
+    case verificationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPayload: return "앱에서 올바른 배경화면 요청을 받지 못했습니다."
+        case .invalidImage: return "현재 미리보기를 PNG 이미지로 만들지 못했습니다."
+        case .noScreens: return "연결된 디스플레이를 찾지 못했습니다."
+        case .originalNotSaved: return "아직 저장된 원래 배경화면이 없습니다. 먼저 배경화면을 한 번 적용해 주세요."
+        case .originalUnavailable(let name): return "\(name)의 원래 배경화면 파일을 찾지 못했습니다."
+        case .verificationFailed: return "macOS가 배경화면 변경을 확인하지 못했습니다."
+        }
+    }
+}
+
+private struct OriginalWallpaperSnapshot: Codable {
+    let capturedAt: Date
+    let screens: [OriginalScreenWallpaper]
+}
+
+private struct OriginalScreenWallpaper: Codable {
+    let displayID: String
+    let displayName: String
+    let url: String
+    let imageScaling: Int?
+    let allowClipping: Bool?
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
@@ -27,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationWillTerminate(_ notification: Notification) {
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "savePNG")
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "wallpaper")
         if let process = serverProcess, process.isRunning {
             process.terminate()
         }
@@ -61,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func createWindow() {
         let contentController = WKUserContentController()
         contentController.add(self, name: "savePNG")
+        contentController.add(self, name: "wallpaper")
         let downloadBridge = #"""
         (() => {
           document.documentElement.classList.add('native-app');
@@ -152,14 +187,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func prepareSupportDirectory(webDirectory: URL) throws -> URL {
-        let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let directory = base.appendingPathComponent("Schedule Wallpaper", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let directory = try applicationSupportDirectory()
         let destination = directory.appendingPathComponent("conference-deadlines-cache.json")
         let seed = webDirectory.appendingPathComponent("data/conference-deadlines-cache.json")
         if !FileManager.default.fileExists(atPath: destination.path), FileManager.default.fileExists(atPath: seed.path) {
             try FileManager.default.copyItem(at: seed, to: destination)
         }
+        return directory
+    }
+
+    private func applicationSupportDirectory() throws -> URL {
+        let base = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let directory = base.appendingPathComponent("Schedule Wallpaper", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
     }
 
@@ -195,12 +235,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "wallpaper" {
+            handleWallpaperMessage(message)
+            return
+        }
         guard message.name == "savePNG",
               let payload = message.body as? [String: Any],
-              let name = payload["name"] as? String,
-              let dataURL = payload["data"] as? String,
-              let comma = dataURL.firstIndex(of: ","),
-              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])) else { return }
+              let name = payload["name"] as? String else { return }
+
+        let data: Data
+        do {
+            data = try pngData(from: payload)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.beginSheetModal(for: window)
+            return
+        }
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.png]
@@ -215,6 +265,138 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 alert.beginSheetModal(for: self.window)
             }
         }
+    }
+
+    private func pngData(from payload: [String: Any]) throws -> Data {
+        guard let dataURL = payload["data"] as? String,
+              dataURL.hasPrefix("data:image/png;base64,"),
+              let comma = dataURL.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])),
+              !data.isEmpty,
+              data.count <= 25 * 1024 * 1024,
+              NSImage(data: data) != nil else {
+            throw WallpaperBridgeError.invalidImage
+        }
+        return data
+    }
+
+    private func handleWallpaperMessage(_ message: WKScriptMessage) {
+        guard let payload = message.body as? [String: Any], let action = payload["action"] as? String else {
+            notifyWallpaperResult(action: "unknown", ok: false, message: WallpaperBridgeError.invalidPayload.localizedDescription)
+            return
+        }
+        do {
+            let message: String
+            switch action {
+            case "apply":
+                message = try applyCurrentWallpaper(data: pngData(from: payload))
+            case "restore":
+                message = try restoreOriginalWallpaper()
+            default:
+                throw WallpaperBridgeError.invalidPayload
+            }
+            notifyWallpaperResult(action: action, ok: true, message: message)
+        } catch {
+            notifyWallpaperResult(action: action, ok: false, message: error.localizedDescription)
+        }
+    }
+
+    private func applyCurrentWallpaper(data: Data) throws -> String {
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { throw WallpaperBridgeError.noScreens }
+        try saveOriginalWallpaperSnapshotIfNeeded(screens: screens)
+
+        let destination = try applicationSupportDirectory().appendingPathComponent("current-wallpaper.png")
+        try data.write(to: destination, options: .atomic)
+
+        let workspace = NSWorkspace.shared
+        for screen in screens {
+            var options = workspace.desktopImageOptions(for: screen) ?? [:]
+            options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
+            options[.allowClipping] = true
+            try workspace.setDesktopImageURL(destination, for: screen, options: options)
+        }
+        guard screens.allSatisfy({ workspace.desktopImageURL(for: $0)?.standardizedFileURL == destination.standardizedFileURL }) else {
+            throw WallpaperBridgeError.verificationFailed
+        }
+        return "현재 미리보기를 배경화면으로 적용했습니다. (\(screens.count)개 화면)"
+    }
+
+    private func saveOriginalWallpaperSnapshotIfNeeded(screens: [NSScreen]) throws {
+        let snapshotURL = try applicationSupportDirectory().appendingPathComponent("original-wallpapers.json")
+        if FileManager.default.fileExists(atPath: snapshotURL.path) {
+            _ = try readOriginalWallpaperSnapshot(from: snapshotURL)
+            return
+        }
+
+        let workspace = NSWorkspace.shared
+        let originals = try screens.map { screen -> OriginalScreenWallpaper in
+            guard let url = workspace.desktopImageURL(for: screen) else {
+                throw WallpaperBridgeError.originalUnavailable(screen.localizedName)
+            }
+            let options = workspace.desktopImageOptions(for: screen) ?? [:]
+            return OriginalScreenWallpaper(
+                displayID: displayIdentifier(for: screen),
+                displayName: screen.localizedName,
+                url: url.absoluteString,
+                imageScaling: (options[.imageScaling] as? NSNumber)?.intValue,
+                allowClipping: (options[.allowClipping] as? NSNumber)?.boolValue
+            )
+        }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(OriginalWallpaperSnapshot(capturedAt: Date(), screens: originals)).write(to: snapshotURL, options: .atomic)
+    }
+
+    private func restoreOriginalWallpaper() throws -> String {
+        let snapshotURL = try applicationSupportDirectory().appendingPathComponent("original-wallpapers.json")
+        guard FileManager.default.fileExists(atPath: snapshotURL.path) else { throw WallpaperBridgeError.originalNotSaved }
+        let snapshot = try readOriginalWallpaperSnapshot(from: snapshotURL)
+        let screens = NSScreen.screens
+        guard !screens.isEmpty else { throw WallpaperBridgeError.noScreens }
+
+        let workspace = NSWorkspace.shared
+        var restoredURLs: [(NSScreen, URL)] = []
+        for (index, screen) in screens.enumerated() {
+            let original = snapshot.screens.first(where: { $0.displayID == displayIdentifier(for: screen) })
+                ?? snapshot.screens.first(where: { $0.displayName == screen.localizedName })
+                ?? (snapshot.screens.count == screens.count ? snapshot.screens[index] : nil)
+            guard let original,
+                  let url = URL(string: original.url),
+                  url.isFileURL,
+                  FileManager.default.fileExists(atPath: url.path) else {
+                throw WallpaperBridgeError.originalUnavailable(screen.localizedName)
+            }
+            var options = workspace.desktopImageOptions(for: screen) ?? [:]
+            if let scaling = original.imageScaling { options[.imageScaling] = scaling }
+            if let clipping = original.allowClipping { options[.allowClipping] = clipping }
+            try workspace.setDesktopImageURL(url, for: screen, options: options)
+            restoredURLs.append((screen, url.standardizedFileURL))
+        }
+        guard restoredURLs.allSatisfy({ workspace.desktopImageURL(for: $0.0)?.standardizedFileURL == $0.1 }) else {
+            throw WallpaperBridgeError.verificationFailed
+        }
+        return "원래 배경화면으로 복원했습니다. (\(screens.count)개 화면)"
+    }
+
+    private func readOriginalWallpaperSnapshot(from url: URL) throws -> OriginalWallpaperSnapshot {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let snapshot = try decoder.decode(OriginalWallpaperSnapshot.self, from: Data(contentsOf: url))
+        guard !snapshot.screens.isEmpty else { throw WallpaperBridgeError.originalNotSaved }
+        return snapshot
+    }
+
+    private func displayIdentifier(for screen: NSScreen) -> String {
+        let key = NSDeviceDescriptionKey("NSScreenNumber")
+        return (screen.deviceDescription[key] as? NSNumber)?.stringValue ?? screen.localizedName
+    }
+
+    private func notifyWallpaperResult(action: String, ok: Bool, message: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: ["action": action, "ok": ok, "message": message]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('schedule-wallpaper:native-result',{detail:\(json)}));")
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
