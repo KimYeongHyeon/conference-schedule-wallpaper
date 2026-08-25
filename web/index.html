@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f4ed">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%23eff6ff'/%3E%3Cpath d='M17 42V30M31 42V17M45 42V24' stroke='%232563eb' stroke-width='7' stroke-linecap='round'/%3E%3C/svg%3E">
+    <title>Schedule Wallpaper</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#preview" aria-label="Schedule Wallpaper 미리보기">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="brand-copy"><strong>Schedule Wallpaper</strong><small>왼쪽을 더블클릭해 편집</small></span>
+      </a>
+
+      <nav class="top-actions" aria-label="배경화면 도구">
+        <span id="conferenceStatus" class="conference-status" aria-live="polite">동기화 중</span>
+        <button id="backgroundButton" class="button button-quiet compact-action" type="button" aria-haspopup="dialog" aria-controls="backgroundDialog" aria-label="배경 선택">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-5 4 4 3-3 4 4M4 5h16v14H4zM16.5 9.2h.01"/></svg><span>배경</span>
+        </button>
+        <button id="addEventButton" class="button button-primary" type="button" aria-label="내 일정 추가">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>일정 추가</span>
+        </button>
+        <button id="downloadButton" class="button button-secondary" type="button" aria-label="PNG 다운로드">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg><span>PNG 저장</span>
+        </button>
+      </nav>
+      <span id="saveStatus" class="save-status" hidden>자동 저장됨</span>
+      <button id="refreshConferenceButton" type="button" hidden aria-label="학회 일정 갱신"></button>
+      <button id="fullscreenButton" type="button" hidden aria-label="전체 화면으로 보기"></button>
+    </header>
+
+    <main id="preview" class="workspace">
+      <section class="preview-area" aria-label="배경화면 미리보기">
+        <div id="canvasShell" class="canvas-shell" tabindex="0" aria-label="일정 배경화면 미리보기. 더블클릭하면 일정을 편집할 수 있습니다.">
+          <canvas id="wallpaperCanvas" width="1920" height="1080" aria-label="일정 배경화면 캔버스">이 브라우저는 Canvas를 지원하지 않습니다.</canvas>
+        </div>
+        <div class="preview-footer">
+          <span id="editHint">더블클릭해 수정·삭제 · 최대 8개</span>
+          <span id="backgroundLabel">밝은 기본 배경</span>
+          <span id="renderWarning" role="status"></span>
+          <a href="https://paperswithcode.co/ai-deadlines" target="_blank" rel="noreferrer">Source: AI Deadlines</a>
+        </div>
+      </section>
+    </main>
+
+    <input id="backgroundInput" type="file" accept="image/*" hidden>
+
+    <dialog id="backgroundDialog" class="edit-dialog background-dialog" aria-labelledby="backgroundDialogTitle">
+      <form id="backgroundForm" class="dialog-card" novalidate>
+        <div class="dialog-heading">
+          <div><p class="eyebrow">BACKGROUND</p><h2 id="backgroundDialogTitle">배경 선택</h2></div>
+          <button id="cancelBackgroundButton" class="close-button" type="button" aria-label="배경 선택 닫기">×</button>
+        </div>
+        <div class="background-fields">
+          <label class="field"><span>단색</span>
+            <span class="color-picker"><input id="backgroundColorInput" type="color" value="#f7f4ed" aria-label="배경 단색 선택"><output id="backgroundColorValue" for="backgroundColorInput">#F7F4ED</output></span>
+          </label>
+          <label class="button button-secondary background-file-button" for="backgroundInput">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l5-5 4 4 3-3 4 4M4 5h16v14H4zM16.5 9.2h.01"/></svg><span>이미지 선택</span>
+          </label>
+          <button id="clearBackgroundButton" class="button button-quiet background-reset-button" type="button">밝은 기본 배경</button>
+        </div>
+        <div class="dialog-actions dialog-actions-primary">
+          <span class="dialog-spacer"></span>
+          <button class="button button-secondary" type="button" data-dialog-cancel>취소</button>
+          <button class="button button-primary" type="submit">단색 적용</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="eventDialog" class="edit-dialog" aria-labelledby="eventDialogTitle">
+      <form id="eventForm" class="dialog-card" novalidate>
+        <div class="dialog-heading">
+          <div><p class="eyebrow">MY SCHEDULE</p><h2 id="eventDialogTitle">일정 편집</h2></div>
+          <button id="cancelEventButton" class="close-button" type="button" aria-label="일정 편집 닫기">×</button>
+        </div>
+        <div class="dialog-fields">
+          <label class="field"><span>DATE</span><input id="eventDateTop" name="dateTop" type="text" autocomplete="off" placeholder="AUG 26" maxlength="16"></label>
+          <label class="field"><span>TIME / DUE</span><input id="eventDateBottom" name="dateBottom" type="text" autocomplete="off" placeholder="14:00" maxlength="24"></label>
+          <label class="field field-wide"><span>TITLE</span><input id="eventTitle" name="title" type="text" autocomplete="off" placeholder="새 일정" maxlength="50" required></label>
+          <label class="field field-wide"><span>NOTE</span><input id="eventNote" name="note" type="text" autocomplete="off" placeholder="장소 또는 메모" maxlength="80"></label>
+        </div>
+        <div class="dialog-actions dialog-actions-primary">
+          <button id="deleteEventButton" class="button button-danger" type="button">삭제</button>
+          <span class="dialog-spacer"></span>
+          <button class="button button-secondary" type="button" data-dialog-cancel>취소</button>
+          <button class="button button-primary" type="submit">저장</button>
+        </div>
+        <div class="dialog-actions dialog-actions-order" aria-label="일정 순서">
+          <button id="moveUpButton" class="button button-order" type="button">↑ 위로</button>
+          <button id="moveDownButton" class="button button-order" type="button">↓ 아래로</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="titleDialog" class="edit-dialog" aria-labelledby="titleDialogTitle">
+      <form id="titleForm" class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">MY SCHEDULE</p><h2 id="titleDialogTitle">제목 편집</h2></div>
+          <button id="cancelTitleButton" class="close-button" type="button" aria-label="제목 편집 닫기">×</button>
+        </div>
+        <div class="dialog-fields">
+          <label class="field field-wide"><span>TITLE</span><input id="wallpaperTitle" name="title" type="text" autocomplete="off" placeholder="내 일정" maxlength="32" required></label>
+          <label class="field field-wide"><span>SUBTITLE</span><input id="wallpaperSubtitle" name="subtitle" type="text" autocomplete="off" placeholder="PERSONAL · THIS WEEK" maxlength="48"></label>
+        </div>
+        <div class="dialog-actions dialog-actions-primary">
+          <span class="dialog-spacer"></span>
+          <button class="button button-secondary" type="button" data-dialog-cancel>취소</button>
+          <button class="button button-primary" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
