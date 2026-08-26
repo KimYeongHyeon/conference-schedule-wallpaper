@@ -126,4 +126,4 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 
 ## Current version
 
-`v1.4.1` — standard `Command-W` window closing and `Command-Q` app quitting, persistent bundled Dock icon, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4.2` — persistent running and stopped Dock icon, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.

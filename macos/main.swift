@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
+        configureAppIcon()
         createWindow()
         startBundledServer()
         NSApp.activate(ignoringOtherApps: true)
@@ -107,6 +108,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.performClose(sender)
     }
 
+    private func configureAppIcon() {
+        guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+              let icon = NSImage(contentsOf: iconURL) else {
+            NSLog("Schedule Wallpaper: bundled AppIcon.icns could not be loaded")
+            return
+        }
+        // A raw AppKit executable does not consistently promote CFBundleIconFile
+        // to the running Dock tile, so load the same bundled icon explicitly.
+        NSApp.applicationIconImage = icon
+    }
+
     private func createWindow() {
         let contentController = WKUserContentController()
         contentController.add(self, name: "savePNG")
@@ -151,6 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
         window.isMovableByWindowBackground = true
+        window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 760, height: 540)
         window.contentView = webView
         window.center()
