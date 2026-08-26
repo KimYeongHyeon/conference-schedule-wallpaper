@@ -10,7 +10,7 @@ A small, light-themed macOS and browser app for turning personal plans and upcom
 - Edits the title or an event by double-clicking the wallpaper preview.
 - Supports zero to eight personal events, including reordering and deletion.
 - Uses an uploaded image, a solid color, or the built-in light background.
-- Applies the current preview directly as the macOS wallpaper and can restore the wallpaper captured before the first apply.
+- Applies the current preview directly to one or more selected macOS displays and can restore the wallpaper captured before the first apply.
 - Shows deadline type, D-day, and the source timezone such as `AoE`, `KST`, or `UTC`.
 - Exports the current wallpaper as a 1920 × 1080 PNG.
 - Refreshes conference data at most once every 24 hours.
@@ -67,7 +67,7 @@ Requirements:
 
 The app is locally/ad-hoc signed rather than notarized with an Apple Developer ID. If macOS blocks the first launch, right-click the app and choose **Open**.
 
-In the Mac app, click **배경화면 적용** to set the current preview on every connected display. Before the first apply, the app stores each display's existing wallpaper in `original-wallpapers.json`. **원래대로** restores that snapshot; later applies do not overwrite it.
+In the Mac app, click **배경화면 적용**, choose one or more connected displays, and confirm. The chosen display IDs are remembered for the next action. Before the first apply, the app stores every connected display's existing wallpaper in `original-wallpapers.json`. **원래대로** lets you choose which displays to restore from that snapshot; later applies do not overwrite it.
 
 ## Run the browser version
 
@@ -124,4 +124,4 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 
 ## Current version
 
-`v1.3` — direct macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4` — per-display macOS wallpaper apply/restore, optically balanced Dock icon, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.

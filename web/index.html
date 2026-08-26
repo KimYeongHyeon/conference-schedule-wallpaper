@@ -47,7 +47,6 @@
           <span id="editHint">더블클릭해 수정·삭제 · 최대 8개</span>
           <span id="backgroundLabel">밝은 기본 배경</span>
           <span id="renderWarning" role="status"></span>
-          <a href="https://paperswithcode.co/ai-deadlines" target="_blank" rel="noreferrer">Source: AI Deadlines</a>
         </div>
       </section>
     </main>
@@ -73,6 +72,27 @@
           <span class="dialog-spacer"></span>
           <button class="button button-secondary" type="button" data-dialog-cancel>취소</button>
           <button class="button button-primary" type="submit">단색 적용</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="screenDialog" class="edit-dialog screen-dialog" aria-labelledby="screenDialogTitle">
+      <form id="screenForm" class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">DISPLAY</p><h2 id="screenDialogTitle">적용할 모니터</h2></div>
+          <button id="cancelScreenButton" class="close-button" type="button" aria-label="모니터 선택 닫기">×</button>
+        </div>
+        <p id="screenDialogDescription" class="dialog-description">배경화면을 바꿀 화면을 선택하세요.</p>
+        <div id="screenList" class="screen-list" role="group" aria-label="연결된 모니터"></div>
+        <div class="screen-selection-summary">
+          <button id="selectAllScreensButton" class="button button-quiet" type="button">모두 선택</button>
+          <span id="selectedScreenCount" aria-live="polite">0개 선택</span>
+        </div>
+        <p id="screenSelectionError" class="inline-error" role="alert" hidden>모니터를 하나 이상 선택해 주세요.</p>
+        <div class="dialog-actions dialog-actions-primary">
+          <span class="dialog-spacer"></span>
+          <button class="button button-secondary" type="button" data-dialog-cancel>취소</button>
+          <button id="confirmScreenButton" class="button button-apply" type="submit">선택한 화면에 적용</button>
         </div>
       </form>
     </dialog>

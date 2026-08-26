@@ -28,6 +28,7 @@
     backgroundDataUrl: "",
     backgroundName: "",
     backgroundColor: "",
+    selectedScreenIDs: [],
     events: []
   };
 
@@ -49,6 +50,16 @@
     cancelBackground: $("#cancelBackgroundButton"),
     applyWallpaper: $("#applyWallpaperButton"),
     restoreWallpaper: $("#restoreWallpaperButton"),
+    screenDialog: $("#screenDialog"),
+    screenForm: $("#screenForm"),
+    screenDialogTitle: $("#screenDialogTitle"),
+    screenDialogDescription: $("#screenDialogDescription"),
+    screenList: $("#screenList"),
+    selectAllScreens: $("#selectAllScreensButton"),
+    selectedScreenCount: $("#selectedScreenCount"),
+    screenSelectionError: $("#screenSelectionError"),
+    confirmScreen: $("#confirmScreenButton"),
+    cancelScreen: $("#cancelScreenButton"),
     download: $("#downloadButton"),
     fullscreen: $("#fullscreenButton"),
     saveStatus: $("#saveStatus"),
@@ -83,6 +94,8 @@
   let toastTimer = 0;
   let nativeActionTimer = 0;
   let lastRenderError = "";
+  let activeWallpaperAction = "apply";
+  let availableScreens = [];
 
   function cloneDefault() {
     return JSON.parse(JSON.stringify(defaultState));
@@ -102,6 +115,7 @@
           ...cloneDefault(),
           ...parsed,
           backgroundColor: normalizeBackgroundColor(parsed.backgroundColor),
+          selectedScreenIDs: Array.isArray(parsed.selectedScreenIDs) ? parsed.selectedScreenIDs.filter(value => typeof value === "string") : [],
           events: Array.isArray(parsed.events) ? parsed.events.slice(0, MAX_PERSONAL) : []
         };
       }
@@ -172,6 +186,120 @@
     elements.restoreWallpaper.setAttribute("aria-busy", String(pending && action === "restore"));
   }
 
+  function requestScreenSelection(action) {
+    activeWallpaperAction = action;
+    postNativeWallpaperAction("list", "", [], action);
+  }
+
+  function normalizeScreenList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap(item => {
+      const id = String(item?.id || "").trim();
+      const name = String(item?.name || "").trim();
+      if (!id || !name) return [];
+      return [{ id, name, resolution: String(item.resolution || ""), isCurrent: Boolean(item.isCurrent) }];
+    });
+  }
+
+  function openScreenDialog(screens) {
+    availableScreens = normalizeScreenList(screens);
+    if (!availableScreens.length) {
+      showToast("연결된 모니터를 찾지 못했습니다.", true);
+      return;
+    }
+
+    const availableIDs = new Set(availableScreens.map(screen => screen.id));
+    const savedIDs = state.selectedScreenIDs.filter(id => availableIDs.has(id));
+    const selectedIDs = new Set(savedIDs.length ? savedIDs : availableScreens.map(screen => screen.id));
+    elements.screenList.replaceChildren();
+
+    for (const screen of availableScreens) {
+      const option = document.createElement("label");
+      option.className = `screen-option${selectedIDs.has(screen.id) ? " selected" : ""}`;
+
+      const icon = document.createElement("span");
+      icon.className = "screen-option-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 5h16v12H4zM8 21h8M12 17v4"/></svg>';
+
+      const copy = document.createElement("span");
+      copy.className = "screen-option-copy";
+      const title = document.createElement("strong");
+      title.textContent = screen.name;
+      if (screen.isCurrent) {
+        const badge = document.createElement("span");
+        badge.className = "screen-current-badge";
+        badge.textContent = "CURRENT";
+        title.append(" ", badge);
+      }
+      const details = document.createElement("small");
+      details.textContent = screen.resolution || "연결된 디스플레이";
+      copy.append(title, details);
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.name = "screen";
+      checkbox.value = screen.id;
+      checkbox.checked = selectedIDs.has(screen.id);
+      checkbox.setAttribute("aria-label", `${screen.name} 선택`);
+      checkbox.addEventListener("change", () => {
+        option.classList.toggle("selected", checkbox.checked);
+        syncScreenSelectionUI();
+      });
+
+      option.append(icon, copy, checkbox);
+      elements.screenList.append(option);
+    }
+
+    const restoring = activeWallpaperAction === "restore";
+    elements.screenDialogTitle.textContent = restoring ? "원래 배경화면 복원" : "적용할 모니터";
+    elements.screenDialogDescription.textContent = restoring
+      ? "원래 배경으로 되돌릴 화면을 선택하세요."
+      : "현재 미리보기를 적용할 화면을 선택하세요.";
+    elements.confirmScreen.textContent = restoring ? "선택한 화면 복원" : "선택한 화면에 적용";
+    elements.confirmScreen.className = `button ${restoring ? "button-primary" : "button-apply"}`;
+    syncScreenSelectionUI();
+    elements.screenDialog.showModal();
+    requestAnimationFrame(() => elements.screenList.querySelector("input")?.focus());
+  }
+
+  function selectedScreenIDs() {
+    return [...elements.screenList.querySelectorAll('input[name="screen"]:checked')].map(input => input.value);
+  }
+
+  function syncScreenSelectionUI() {
+    const count = selectedScreenIDs().length;
+    const allSelected = count === availableScreens.length;
+    elements.selectedScreenCount.textContent = `${availableScreens.length}개 중 ${count}개 선택`;
+    elements.selectAllScreens.textContent = allSelected ? "전체 해제" : "모두 선택";
+    elements.confirmScreen.disabled = count === 0;
+    elements.screenSelectionError.hidden = count > 0;
+  }
+
+  function selectAllScreens() {
+    const checkboxes = [...elements.screenList.querySelectorAll('input[name="screen"]')];
+    const shouldSelect = checkboxes.some(input => !input.checked);
+    for (const checkbox of checkboxes) {
+      checkbox.checked = shouldSelect;
+      checkbox.closest(".screen-option")?.classList.toggle("selected", shouldSelect);
+    }
+    syncScreenSelectionUI();
+  }
+
+  function submitScreenSelection(event) {
+    event.preventDefault();
+    const screenIDs = selectedScreenIDs();
+    if (!screenIDs.length) {
+      elements.screenSelectionError.hidden = false;
+      return;
+    }
+    state.selectedScreenIDs = screenIDs;
+    saveState();
+    elements.screenDialog.close();
+    if (activeWallpaperAction === "restore") restoreOriginalWallpaper(screenIDs);
+    else applyWallpaperToDesktop(screenIDs);
+  }
+
   function bindControls() {
     elements.addEvent.addEventListener("click", () => openEventDialog(-1));
     elements.refreshConference.addEventListener("click", () => loadConferenceDeadlines(true));
@@ -187,8 +315,8 @@
       elements.backgroundDialog.close();
       showToast("기본 밝은 배경으로 돌아왔습니다.");
     });
-    elements.applyWallpaper.addEventListener("click", applyWallpaperToDesktop);
-    elements.restoreWallpaper.addEventListener("click", restoreOriginalWallpaper);
+    elements.applyWallpaper.addEventListener("click", () => requestScreenSelection("apply"));
+    elements.restoreWallpaper.addEventListener("click", () => requestScreenSelection("restore"));
     window.addEventListener("schedule-wallpaper:native-result", handleNativeWallpaperResult);
     elements.download.addEventListener("click", downloadWallpaper);
     elements.fullscreen.addEventListener("click", toggleFullscreen);
@@ -209,10 +337,13 @@
     elements.moveDown.addEventListener("click", () => moveActiveEvent(1));
     elements.titleForm.addEventListener("submit", saveTitleFromDialog);
     elements.cancelTitle.addEventListener("click", () => elements.titleDialog.close());
+    elements.screenForm.addEventListener("submit", submitScreenSelection);
+    elements.cancelScreen.addEventListener("click", () => elements.screenDialog.close());
+    elements.selectAllScreens.addEventListener("click", selectAllScreens);
     document.querySelectorAll("[data-dialog-cancel]").forEach(button => {
       button.addEventListener("click", () => button.closest("dialog")?.close());
     });
-    for (const dialog of [elements.backgroundDialog, elements.eventDialog, elements.titleDialog]) {
+    for (const dialog of [elements.backgroundDialog, elements.screenDialog, elements.eventDialog, elements.titleDialog]) {
       dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
     }
   }
@@ -624,18 +755,7 @@
     const { x, y, w, h } = LEFT_PANEL;
     drawPanelFrame(x, y, w, h);
     drawPanelHeader(x, y, w, "MY SCHEDULE", state.title || "내 일정", state.subtitle || "PERSONAL · THIS WEEK", state.accent);
-    if (!state.events.length) {
-      ctx.font = "700 25px -apple-system, BlinkMacSystemFont, \"Apple SD Gothic Neo\", sans-serif";
-      ctx.fillStyle = "#768397";
-      ctx.fillText("더블클릭해서", x + 48, y + 330);
-      ctx.font = "500 19px -apple-system, BlinkMacSystemFont, \"Apple SD Gothic Neo\", sans-serif";
-      ctx.fillStyle = "#9aa5b5";
-      ctx.fillText("내 일정을 추가하세요.", x + 48, y + 366);
-      ctx.font = "560 14px -apple-system, BlinkMacSystemFont, \"Apple SD Gothic Neo\", sans-serif";
-      ctx.fillStyle = "#b0bac7";
-      ctx.fillText("최대 8개 · 모두 삭제 가능", x + 48, y + 398);
-      return;
-    }
+    if (!state.events.length) return;
     state.events.slice(0, MAX_PERSONAL).forEach((item, index) => {
       const rowY = y + 258 + index * 82;
       ctx.fillStyle = index === 0 ? state.accent : "rgba(37,99,235,.12)";
@@ -660,7 +780,7 @@
     const x = 1146, y = 60, w = 710, h = 960;
     const accent = "#d97745";
     drawPanelFrame(x, y, w, h);
-    drawPanelHeader(x, y, w, "TOP TIER DEADLINES", "학회 데드라인", "TOP TIER ONLY · AUTO SYNC", accent);
+    drawPanelHeader(x, y, w, "TOP TIER DEADLINES", "학회 데드라인", "", accent);
     conferenceItems.slice(0, MAX_CONFERENCE).forEach((item, index) => {
       const rowY = y + 255 + index * 91;
       ctx.fillStyle = index === 0 ? "rgba(217,119,69,.13)" : "rgba(100,116,139,.06)";
@@ -684,10 +804,6 @@
       ctx.fillText((item.label || "Deadline").slice(0, 28), x + w - 59, rowY + 20);
       ctx.textAlign = "left";
     });
-    ctx.font = "560 13px -apple-system, BlinkMacSystemFont, sans-serif";
-    ctx.fillStyle = "#94a3b8";
-    const sourceLabel = conferenceMeta.source === "live" ? "DAILY SYNC" : conferenceMeta.source.includes("cache") ? "DAILY CACHE" : "SNAPSHOT";
-    ctx.fillText(`SOURCE · PWC AI DEADLINES  /  ${sourceLabel}`, x + 48, y + h - 40);
   }
 
   function renderWallpaper() {
@@ -749,46 +865,53 @@
     });
   }
 
-  function postNativeWallpaperAction(action, data = "") {
+  function postNativeWallpaperAction(action, data = "", screenIDs = [], busyAction = action) {
     const handler = nativeWallpaperHandler();
     if (!handler) {
       showToast("배경화면 직접 적용은 Mac 앱에서 사용할 수 있습니다.", true);
       return;
     }
-    setNativeActionPending(action, true);
+    setNativeActionPending(busyAction, true);
     clearTimeout(nativeActionTimer);
     nativeActionTimer = window.setTimeout(() => {
-      setNativeActionPending(action, false);
+      setNativeActionPending(busyAction, false);
       showToast("macOS가 응답하지 않았습니다. 다시 시도해 주세요.", true);
     }, 10000);
     try {
-      handler.postMessage({ action, data });
+      handler.postMessage({ action, data, screenIDs });
     } catch (error) {
       clearTimeout(nativeActionTimer);
-      setNativeActionPending(action, false);
+      setNativeActionPending(busyAction, false);
       console.error("macOS 배경화면 요청을 보내지 못했습니다.", error);
       showToast("배경화면 요청을 보내지 못했습니다.", true);
     }
   }
 
-  function applyWallpaperToDesktop() {
+  function applyWallpaperToDesktop(screenIDs) {
     renderWallpaper();
     requestAnimationFrame(() => {
       if (!canvasLooksRendered()) {
         showToast("미리보기가 완성되지 않아 배경화면을 적용하지 않았습니다.", true);
         return;
       }
-      postNativeWallpaperAction("apply", elements.canvas.toDataURL("image/png"));
+      postNativeWallpaperAction("apply", elements.canvas.toDataURL("image/png"), screenIDs);
     });
   }
 
-  function restoreOriginalWallpaper() {
-    postNativeWallpaperAction("restore");
+  function restoreOriginalWallpaper(screenIDs) {
+    postNativeWallpaperAction("restore", "", screenIDs);
   }
 
   function handleNativeWallpaperResult(event) {
     const detail = event.detail || {};
-    if (!['apply', 'restore'].includes(detail.action)) return;
+    if (detail.action === "list") {
+      clearTimeout(nativeActionTimer);
+      setNativeActionPending(activeWallpaperAction, false);
+      if (detail.ok) openScreenDialog(detail.screens);
+      else showToast(detail.message || "모니터 목록을 불러오지 못했습니다.", true);
+      return;
+    }
+    if (!["apply", "restore"].includes(detail.action)) return;
     clearTimeout(nativeActionTimer);
     setNativeActionPending(detail.action, false);
     showToast(detail.message || (detail.ok ? "배경화면을 변경했습니다." : "배경화면을 변경하지 못했습니다."), !detail.ok);

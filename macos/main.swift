@@ -8,6 +8,8 @@ private enum WallpaperBridgeError: LocalizedError {
     case invalidPayload
     case invalidImage
     case noScreens
+    case noScreensSelected
+    case selectedScreenUnavailable
     case originalNotSaved
     case originalUnavailable(String)
     case verificationFailed
@@ -17,6 +19,8 @@ private enum WallpaperBridgeError: LocalizedError {
         case .invalidPayload: return "앱에서 올바른 배경화면 요청을 받지 못했습니다."
         case .invalidImage: return "현재 미리보기를 PNG 이미지로 만들지 못했습니다."
         case .noScreens: return "연결된 디스플레이를 찾지 못했습니다."
+        case .noScreensSelected: return "모니터를 하나 이상 선택해 주세요."
+        case .selectedScreenUnavailable: return "선택한 모니터 구성이 바뀌었습니다. 목록을 다시 열어 주세요."
         case .originalNotSaved: return "아직 저장된 원래 배경화면이 없습니다. 먼저 배경화면을 한 번 적용해 주세요."
         case .originalUnavailable(let name): return "\(name)의 원래 배경화면 파일을 찾지 못했습니다."
         case .verificationFailed: return "macOS가 배경화면 변경을 확인하지 못했습니다."
@@ -35,6 +39,11 @@ private struct OriginalScreenWallpaper: Codable {
     let url: String
     let imageScaling: Int?
     let allowClipping: Bool?
+}
+
+private struct WallpaperOperationResult {
+    let message: String
+    let expectedURLs: [(screen: NSScreen, url: URL)]
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
@@ -83,10 +92,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let image = NSImage(size: size)
         image.lockFocus()
         NSColor(calibratedRed: 0.93, green: 0.96, blue: 1.0, alpha: 1).setFill()
-        NSBezierPath(roundedRect: NSRect(origin: .zero, size: size), xRadius: 54, yRadius: 54).fill()
+        NSBezierPath(roundedRect: NSRect(x: 22, y: 22, width: 212, height: 212), xRadius: 46, yRadius: 46).fill()
         NSColor(calibratedRed: 0.15, green: 0.39, blue: 0.92, alpha: 1).setFill()
-        for (x, height) in [(70.0, 62.0), (116.0, 122.0), (162.0, 88.0)] {
-            NSBezierPath(roundedRect: NSRect(x: x, y: 58, width: 24, height: height), xRadius: 12, yRadius: 12).fill()
+        for (x, height) in [(79.0, 52.0), (118.0, 102.0), (157.0, 74.0)] {
+            NSBezierPath(roundedRect: NSRect(x: x, y: 70, width: 20, height: height), xRadius: 10, yRadius: 10).fill()
         }
         image.unlockFocus()
         NSApp.applicationIconImage = image
@@ -286,40 +295,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
         do {
-            let message: String
+            let allScreens = NSScreen.screens
+            guard !allScreens.isEmpty else { throw WallpaperBridgeError.noScreens }
+            if action == "list" {
+                notifyWallpaperResult(action: action, ok: true, message: "", screens: screenPayload(from: allScreens))
+                return
+            }
+            let targetScreens = try selectedScreens(from: payload, allScreens: allScreens)
+            let result: WallpaperOperationResult
             switch action {
             case "apply":
-                message = try applyCurrentWallpaper(data: pngData(from: payload))
+                result = try applyCurrentWallpaper(data: pngData(from: payload), targetScreens: targetScreens, allScreens: allScreens)
             case "restore":
-                message = try restoreOriginalWallpaper()
+                result = try restoreOriginalWallpaper(targetScreens: targetScreens, allScreens: allScreens)
             default:
                 throw WallpaperBridgeError.invalidPayload
             }
-            notifyWallpaperResult(action: action, ok: true, message: message)
+            verifyWallpaperResult(action: action, result: result)
         } catch {
             notifyWallpaperResult(action: action, ok: false, message: error.localizedDescription)
         }
     }
 
-    private func applyCurrentWallpaper(data: Data) throws -> String {
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else { throw WallpaperBridgeError.noScreens }
-        try saveOriginalWallpaperSnapshotIfNeeded(screens: screens)
+    private func screenPayload(from screens: [NSScreen]) -> [[String: Any]] {
+        screens.map { screen in
+            let pixelWidth = Int((screen.frame.width * screen.backingScaleFactor).rounded())
+            let pixelHeight = Int((screen.frame.height * screen.backingScaleFactor).rounded())
+            return [
+                "id": displayIdentifier(for: screen),
+                "name": screen.localizedName,
+                "resolution": "\(pixelWidth) × \(pixelHeight)",
+                "isCurrent": screen == window.screen
+            ]
+        }
+    }
+
+    private func selectedScreens(from payload: [String: Any], allScreens: [NSScreen]) throws -> [NSScreen] {
+        guard let rawIDs = payload["screenIDs"] as? [Any], !rawIDs.isEmpty else {
+            throw WallpaperBridgeError.noScreensSelected
+        }
+        let ids = rawIDs.compactMap { $0 as? String }
+        guard ids.count == rawIDs.count else { throw WallpaperBridgeError.invalidPayload }
+        let requested = Set(ids)
+        let screens = allScreens.filter { requested.contains(displayIdentifier(for: $0)) }
+        guard screens.count == requested.count else { throw WallpaperBridgeError.selectedScreenUnavailable }
+        return screens
+    }
+
+    private func applyCurrentWallpaper(data: Data, targetScreens: [NSScreen], allScreens: [NSScreen]) throws -> WallpaperOperationResult {
+        try saveOriginalWallpaperSnapshotIfNeeded(screens: allScreens)
 
         let destination = try applicationSupportDirectory().appendingPathComponent("current-wallpaper.png")
         try data.write(to: destination, options: .atomic)
 
         let workspace = NSWorkspace.shared
-        for screen in screens {
+        for screen in targetScreens {
             var options = workspace.desktopImageOptions(for: screen) ?? [:]
             options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
             options[.allowClipping] = true
             try workspace.setDesktopImageURL(destination, for: screen, options: options)
         }
-        guard screens.allSatisfy({ workspace.desktopImageURL(for: $0)?.standardizedFileURL == destination.standardizedFileURL }) else {
-            throw WallpaperBridgeError.verificationFailed
-        }
-        return "현재 미리보기를 배경화면으로 적용했습니다. (\(screens.count)개 화면)"
+        return WallpaperOperationResult(
+            message: "현재 미리보기를 배경화면으로 적용했습니다. (\(targetScreens.count)개 화면)",
+            expectedURLs: targetScreens.map { ($0, destination.standardizedFileURL) }
+        )
     }
 
     private func saveOriginalWallpaperSnapshotIfNeeded(screens: [NSScreen]) throws {
@@ -349,19 +388,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         try encoder.encode(OriginalWallpaperSnapshot(capturedAt: Date(), screens: originals)).write(to: snapshotURL, options: .atomic)
     }
 
-    private func restoreOriginalWallpaper() throws -> String {
+    private func restoreOriginalWallpaper(targetScreens: [NSScreen], allScreens: [NSScreen]) throws -> WallpaperOperationResult {
         let snapshotURL = try applicationSupportDirectory().appendingPathComponent("original-wallpapers.json")
         guard FileManager.default.fileExists(atPath: snapshotURL.path) else { throw WallpaperBridgeError.originalNotSaved }
         let snapshot = try readOriginalWallpaperSnapshot(from: snapshotURL)
-        let screens = NSScreen.screens
-        guard !screens.isEmpty else { throw WallpaperBridgeError.noScreens }
 
         let workspace = NSWorkspace.shared
         var restoredURLs: [(NSScreen, URL)] = []
-        for (index, screen) in screens.enumerated() {
+        for screen in targetScreens {
+            let index = allScreens.firstIndex(of: screen)
             let original = snapshot.screens.first(where: { $0.displayID == displayIdentifier(for: screen) })
                 ?? snapshot.screens.first(where: { $0.displayName == screen.localizedName })
-                ?? (snapshot.screens.count == screens.count ? snapshot.screens[index] : nil)
+                ?? (snapshot.screens.count == allScreens.count ? index.map { snapshot.screens[$0] } : nil)
             guard let original,
                   let url = URL(string: original.url),
                   url.isFileURL,
@@ -374,10 +412,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             try workspace.setDesktopImageURL(url, for: screen, options: options)
             restoredURLs.append((screen, url.standardizedFileURL))
         }
-        guard restoredURLs.allSatisfy({ workspace.desktopImageURL(for: $0.0)?.standardizedFileURL == $0.1 }) else {
-            throw WallpaperBridgeError.verificationFailed
-        }
-        return "원래 배경화면으로 복원했습니다. (\(screens.count)개 화면)"
+        return WallpaperOperationResult(
+            message: "원래 배경화면으로 복원했습니다. (\(targetScreens.count)개 화면)",
+            expectedURLs: restoredURLs.map { ($0.0, $0.1) }
+        )
     }
 
     private func readOriginalWallpaperSnapshot(from url: URL) throws -> OriginalWallpaperSnapshot {
@@ -393,8 +431,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         return (screen.deviceDescription[key] as? NSNumber)?.stringValue ?? screen.localizedName
     }
 
-    private func notifyWallpaperResult(action: String, ok: Bool, message: String) {
-        guard let data = try? JSONSerialization.data(withJSONObject: ["action": action, "ok": ok, "message": message]),
+    private func verifyWallpaperResult(action: String, result: WallpaperOperationResult, attempt: Int = 0) {
+        let workspace = NSWorkspace.shared
+        let verified = result.expectedURLs.allSatisfy {
+            workspace.desktopImageURL(for: $0.screen)?.standardizedFileURL == $0.url
+        }
+        if verified {
+            notifyWallpaperResult(action: action, ok: true, message: result.message)
+            return
+        }
+        guard attempt < 10 else {
+            notifyWallpaperResult(action: action, ok: false, message: WallpaperBridgeError.verificationFailed.localizedDescription)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.verifyWallpaperResult(action: action, result: result, attempt: attempt + 1)
+        }
+    }
+
+    private func notifyWallpaperResult(action: String, ok: Bool, message: String, screens: [[String: Any]]? = nil) {
+        var payload: [String: Any] = ["action": action, "ok": ok, "message": message]
+        if let screens { payload["screens"] = screens }
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8) else { return }
         webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('schedule-wallpaper:native-result',{detail:\(json)}));")
     }
