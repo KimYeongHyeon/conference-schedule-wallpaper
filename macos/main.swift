@@ -56,14 +56,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMainMenu()
-        configureAppIcon()
         createWindow()
         startBundledServer()
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            window.makeKeyAndOrderFront(nil)
+        }
+        return true
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -77,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     private func installMainMenu() {
         let mainMenu = NSMenu()
+
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
@@ -84,21 +91,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Schedule Wallpaper 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appMenuItem.submenu = appMenu
+
+        let fileMenuItem = NSMenuItem()
+        mainMenu.addItem(fileMenuItem)
+        let fileMenu = NSMenu(title: "파일")
+        let closeWindowItem = NSMenuItem(title: "창 닫기", action: #selector(closeMainWindow(_:)), keyEquivalent: "w")
+        closeWindowItem.target = self
+        fileMenu.addItem(closeWindowItem)
+        fileMenuItem.submenu = fileMenu
+
         NSApp.mainMenu = mainMenu
     }
 
-    private func configureAppIcon() {
-        let size = NSSize(width: 256, height: 256)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor(calibratedRed: 0.93, green: 0.96, blue: 1.0, alpha: 1).setFill()
-        NSBezierPath(roundedRect: NSRect(x: 22, y: 22, width: 212, height: 212), xRadius: 46, yRadius: 46).fill()
-        NSColor(calibratedRed: 0.15, green: 0.39, blue: 0.92, alpha: 1).setFill()
-        for (x, height) in [(79.0, 52.0), (118.0, 102.0), (157.0, 74.0)] {
-            NSBezierPath(roundedRect: NSRect(x: x, y: 70, width: 20, height: height), xRadius: 10, yRadius: 10).fill()
-        }
-        image.unlockFocus()
-        NSApp.applicationIconImage = image
+    @objc private func closeMainWindow(_ sender: Any?) {
+        window.performClose(sender)
     }
 
     private func createWindow() {

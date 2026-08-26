@@ -11,6 +11,7 @@ A small, light-themed macOS and browser app for turning personal plans and upcom
 - Supports zero to eight personal events, including reordering and deletion.
 - Uses an uploaded image, a solid color, or the built-in light background.
 - Applies the current preview directly to one or more selected macOS displays and can restore the wallpaper captured before the first apply.
+- Closes the window with `Command-W`, keeps the app running, and quits completely with `Command-Q`.
 - Shows deadline type, D-day, and the source timezone such as `AoE`, `KST`, or `UTC`.
 - Exports the current wallpaper as a 1920 × 1080 PNG.
 - Refreshes conference data at most once every 24 hours.
@@ -93,6 +94,7 @@ mkdir -p "build/Schedule Wallpaper.app/Contents/MacOS" \
          "build/Schedule Wallpaper.app/Contents/Resources"
 
 cp macos/Info.plist "build/Schedule Wallpaper.app/Contents/Info.plist"
+cp macos/AppIcon.icns "build/Schedule Wallpaper.app/Contents/Resources/AppIcon.icns"
 
 swiftc -O -target arm64-apple-macos13.0 \
   macos/main.swift \
@@ -118,10 +120,10 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 ```text
 .
 ├── docs/preview.png       # Screenshot
-├── macos/                 # AppKit/WKWebView wrapper and Info.plist
+├── macos/                 # AppKit/WKWebView wrapper, Info.plist, and app icon
 └── web/                   # Browser app, local server, and cached snapshot
 ```
 
 ## Current version
 
-`v1.4` — per-display macOS wallpaper apply/restore, optically balanced Dock icon, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4.1` — standard `Command-W` window closing and `Command-Q` app quitting, persistent bundled Dock icon, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
