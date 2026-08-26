@@ -127,4 +127,4 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 
 ## Current version
 
-`v1.4.3` — native calendar date picker, persistent running and stopped Dock icon, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4.4` — clearer sync freshness wording, cleaner single-event editing, native calendar date picker, persistent running and stopped Dock icon, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.

@@ -229,7 +229,7 @@
       if (screen.isCurrent) {
         const badge = document.createElement("span");
         badge.className = "screen-current-badge";
-        badge.textContent = "CURRENT";
+        badge.textContent = "현재";
         title.append(" ", badge);
       }
       const details = document.createElement("small");
@@ -462,7 +462,7 @@
     elements.eventNote.value = item.note || "";
     const editing = index >= 0;
     elements.deleteEvent.hidden = !editing;
-    elements.moveUp.parentElement.hidden = !editing;
+    elements.moveUp.parentElement.hidden = !editing || state.events.length < 2;
     elements.moveUp.hidden = false;
     elements.moveDown.hidden = false;
     elements.moveUp.disabled = !editing || index === 0;
@@ -633,8 +633,8 @@
         };
         const cached = conferenceMeta.source.includes("cache");
         const stale = conferenceMeta.source === "stale-cache";
-        setConferenceStatus(stale ? "error" : cached ? "cached" : "live", stale ? "최근 데이터" : cached ? "오늘 데이터" : "오늘 갱신됨", `하루 1회 · ${formatSyncTime(conferenceMeta.fetchedAt)}`);
-        if (manual) showToast(stale ? "연결 문제로 최근 정상 데이터를 유지합니다." : "오늘의 학회 데이터를 확인했습니다.");
+        setConferenceStatus(stale ? "error" : cached ? "cached" : "live", stale ? "최근 정상 데이터" : cached ? "최근 동기화" : "방금 갱신됨", `하루 1회 · ${formatSyncTime(conferenceMeta.fetchedAt)}`);
+        if (manual) showToast(stale ? "연결 문제로 최근 정상 데이터를 유지합니다." : "학회 데이터를 확인했습니다.");
       }
     } catch (error) {
       console.error("학회 데이터를 불러오지 못했습니다.", error);
