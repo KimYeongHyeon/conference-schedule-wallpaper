@@ -410,8 +410,45 @@
     else elements.canvas.style.cursor = "default";
   }
 
+  const PERSONAL_MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+  function calendarDateParts(value) {
+    const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return { year, month, day, date };
+  }
+
   function defaultEventDate() {
-    return new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit" }).format(new Date()).toUpperCase();
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function eventDateInputValue(value) {
+    const direct = calendarDateParts(value);
+    if (direct) return `${direct.year}-${String(direct.month).padStart(2, "0")}-${String(direct.day).padStart(2, "0")}`;
+    const legacy = String(value || "").trim().toUpperCase().match(/^([A-Z]{3})\s+(\d{1,2})$/);
+    if (!legacy) return "";
+    const monthIndex = PERSONAL_MONTHS.indexOf(legacy[1]);
+    const day = Number(legacy[2]);
+    if (monthIndex < 0) return "";
+    const year = new Date().getFullYear();
+    const date = new Date(year, monthIndex, day);
+    if (date.getMonth() !== monthIndex || date.getDate() !== day) return "";
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  function personalDateLabel(value) {
+    const parts = calendarDateParts(value);
+    if (!parts) return String(value || "DATE").toUpperCase();
+    return new Intl.DateTimeFormat("en-US", { month: "short", day: "2-digit" }).format(parts.date).toUpperCase();
   }
 
   function openEventDialog(index) {
@@ -419,7 +456,7 @@
     activeEventIndex = index;
     const item = index >= 0 ? state.events[index] : { dateTop: defaultEventDate(), dateBottom: "09:00", title: "", note: "" };
     elements.eventDialogTitle.textContent = index >= 0 ? "내 일정 수정" : "내 일정 추가";
-    elements.eventDateTop.value = item.dateTop || "";
+    elements.eventDateTop.value = eventDateInputValue(item.dateTop);
     elements.eventDateBottom.value = item.dateBottom || "";
     elements.eventTitle.value = item.title || "";
     elements.eventNote.value = item.note || "";
@@ -442,7 +479,7 @@
       return showToast("일정 이름을 입력해 주세요.", true);
     }
     const item = {
-      dateTop: elements.eventDateTop.value.trim().toUpperCase() || "DATE",
+      dateTop: elements.eventDateTop.value || "",
       dateBottom: elements.eventDateBottom.value.trim().toUpperCase() || "TIME",
       title,
       note: elements.eventNote.value.trim()
@@ -763,7 +800,7 @@
       ctx.fill();
       ctx.font = "760 16px -apple-system, BlinkMacSystemFont, sans-serif";
       ctx.fillStyle = state.accent;
-      ctx.fillText((item.dateTop || "DATE").toUpperCase(), x + 76, rowY + 22);
+      ctx.fillText(personalDateLabel(item.dateTop), x + 76, rowY + 22);
       ctx.font = "640 14px -apple-system, BlinkMacSystemFont, sans-serif";
       ctx.fillStyle = "#8a96a8";
       ctx.fillText((item.dateBottom || "TIME").toUpperCase(), x + 76, rowY + 48);
@@ -807,10 +844,13 @@
   }
 
   function renderWallpaper() {
+    const personalSummary = state.events.slice(0, MAX_PERSONAL).map(item =>
+      `${personalDateLabel(item.dateTop)}, ${(item.dateBottom || "TIME").toUpperCase()}, ${item.title || "새 일정"}`
+    ).join("; ");
     const conferenceSummary = conferenceItems.slice(0, MAX_CONFERENCE).map(item =>
       `${item.shortName} ${item.year}, ${dDayLabel(item.deadlineAt)}, ${timezoneLabel(item.timezone)}, ${deadlineTypeLabel(item.type, item.label)}`
     ).join("; ");
-    elements.canvas.setAttribute("aria-label", `일정 배경화면. 왼쪽 개인 일정은 더블클릭해 편집. Top tier conference deadlines: ${conferenceSummary}`);
+    elements.canvas.setAttribute("aria-label", `일정 배경화면. Personal schedule: ${personalSummary || "none"}. Top tier conference deadlines: ${conferenceSummary}`);
     const token = ++renderToken;
     requestAnimationFrame(() => {
       if (token !== renderToken) return;

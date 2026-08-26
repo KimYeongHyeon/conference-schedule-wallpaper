@@ -9,6 +9,7 @@ A small, light-themed macOS and browser app for turning personal plans and upcom
 - Keeps personal events on the left and conference deadlines on the right.
 - Edits the title or an event by double-clicking the wallpaper preview.
 - Supports zero to eight personal events, including reordering and deletion.
+- Selects personal-event dates with the native calendar picker.
 - Uses an uploaded image, a solid color, or the built-in light background.
 - Applies the current preview directly to one or more selected macOS displays and can restore the wallpaper captured before the first apply.
 - Closes the window with `Command-W`, keeps the app running, and quits completely with `Command-Q`.
@@ -126,4 +127,4 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 
 ## Current version
 
-`v1.4.2` — persistent running and stopped Dock icon, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4.3` — native calendar date picker, persistent running and stopped Dock icon, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.

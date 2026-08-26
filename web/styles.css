@@ -148,6 +148,9 @@ button:focus-visible, input:focus-visible, .canvas-shell:focus-visible, label[fo
 .field > span { color: var(--muted); font-size: 10px; font-weight: 750; letter-spacing: .04em; }
 .field input { width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--ink); font-size: 14px; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
 .field input::placeholder { color: var(--subtle); }
+.field input[type="date"] { color-scheme: light; cursor: pointer; }
+.field input[type="date"]::-webkit-calendar-picker-indicator { margin: -5px; padding: 8px; opacity: .62; cursor: pointer; }
+.field input[type="date"]:hover::-webkit-calendar-picker-indicator { opacity: .9; }
 .field input:hover { border-color: var(--line-strong); }
 .field input:focus { border-color: rgba(37, 99, 235, .6); background: #fbfdff; box-shadow: 0 0 0 3px rgba(37, 99, 235, .08); outline: 0; }
 .dialog-actions { display: flex; gap: 8px; }
