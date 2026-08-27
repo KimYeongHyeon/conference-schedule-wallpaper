@@ -109,9 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     private func configureAppIcon() {
-        guard let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+        let configuredIconFile = Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") as? String
+        let iconResource = ((configuredIconFile ?? "ScheduleWallpaperIcon.icns") as NSString).deletingPathExtension
+        guard let iconURL = Bundle.main.url(forResource: iconResource, withExtension: "icns"),
               let icon = NSImage(contentsOf: iconURL) else {
-            NSLog("Schedule Wallpaper: bundled AppIcon.icns could not be loaded")
+            NSLog("Schedule Wallpaper: bundled %@.icns could not be loaded", iconResource)
             return
         }
         // A raw AppKit executable does not consistently promote CFBundleIconFile

@@ -95,7 +95,7 @@ mkdir -p "build/Schedule Wallpaper.app/Contents/MacOS" \
          "build/Schedule Wallpaper.app/Contents/Resources"
 
 cp macos/Info.plist "build/Schedule Wallpaper.app/Contents/Info.plist"
-cp macos/AppIcon.icns "build/Schedule Wallpaper.app/Contents/Resources/AppIcon.icns"
+cp macos/AppIcon.icns "build/Schedule Wallpaper.app/Contents/Resources/ScheduleWallpaperIcon.icns"
 
 swiftc -O -target arm64-apple-macos13.0 \
   macos/main.swift \
@@ -127,4 +127,4 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 
 ## Current version
 
-`v1.4.4` — clearer sync freshness wording, cleaner single-event editing, native calendar date picker, persistent running and stopped Dock icon, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4.5` — fixes the Dock icon after the app quits by using a cache-safe bundle icon resource, while retaining clearer sync freshness wording, cleaner single-event editing, the native calendar date picker, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
