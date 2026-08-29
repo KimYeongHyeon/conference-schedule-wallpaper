@@ -127,4 +127,4 @@ codesign --force --deep --sign - "build/Schedule Wallpaper.app"
 
 ## Current version
 
-`v1.4.5` — fixes the Dock icon after the app quits by using a cache-safe bundle icon resource, while retaining clearer sync freshness wording, cleaner single-event editing, the native calendar date picker, standard `Command-W` window closing and `Command-Q` app quitting, per-display macOS wallpaper apply/restore, image and solid-color backgrounds, native image picker, multiple personal events, daily conference sync, and PNG export.
+`v1.4.6` — keeps macOS from reusing a stale wallpaper after applying changes, fits the complete 16:9 composition on portrait displays without cropping, and leaves the personal-schedule area completely blank when no personal events exist. It also retains the cache-safe Dock icon, native calendar date picker, standard `Command-W`/`Command-Q` behavior, per-display apply/restore, image and solid-color backgrounds, multiple personal events, daily conference sync, and PNG export.

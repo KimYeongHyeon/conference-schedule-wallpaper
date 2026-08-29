@@ -789,10 +789,10 @@
   }
 
   function drawPersonalPanel() {
+    if (!state.events.length) return;
     const { x, y, w, h } = LEFT_PANEL;
     drawPanelFrame(x, y, w, h);
     drawPanelHeader(x, y, w, "MY SCHEDULE", state.title || "내 일정", state.subtitle || "PERSONAL · THIS WEEK", state.accent);
-    if (!state.events.length) return;
     state.events.slice(0, MAX_PERSONAL).forEach((item, index) => {
       const rowY = y + 258 + index * 82;
       ctx.fillStyle = index === 0 ? state.accent : "rgba(37,99,235,.12)";

@@ -366,14 +366,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func applyCurrentWallpaper(data: Data, targetScreens: [NSScreen], allScreens: [NSScreen]) throws -> WallpaperOperationResult {
         try saveOriginalWallpaperSnapshotIfNeeded(screens: allScreens)
 
-        let destination = try applicationSupportDirectory().appendingPathComponent("current-wallpaper.png")
+        // macOS caches desktop images by URL, so overwriting one fixed path can
+        // leave the previous wallpaper visible even when the PNG bytes changed.
+        let destination = try applicationSupportDirectory()
+            .appendingPathComponent("current-wallpaper-\(UUID().uuidString).png")
         try data.write(to: destination, options: .atomic)
 
         let workspace = NSWorkspace.shared
         for screen in targetScreens {
             var options = workspace.desktopImageOptions(for: screen) ?? [:]
             options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
-            options[.allowClipping] = true
+            options[.allowClipping] = false
             try workspace.setDesktopImageURL(destination, for: screen, options: options)
         }
         return WallpaperOperationResult(
